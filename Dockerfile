@@ -2,6 +2,9 @@
 
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+# Install mkcert root CA so the container trusts *.dummy.localhost certificates
+COPY certs/rootCA.pem /usr/local/share/ca-certificates/mkcert-ca.crt
+RUN update-ca-certificates
 USER $APP_UID
 WORKDIR /app
 EXPOSE 8080

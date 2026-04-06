@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Yarp.ReverseProxy;
@@ -20,7 +21,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFE", policy =>
-        policy.WithOrigins("http://fe.dummy.localhost")
+        policy.WithOrigins("https://fe.dummy.localhost")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials());
@@ -37,17 +38,13 @@ builder.Services.AddAuthentication(options =>
         options.Cookie.Name = ".DummyApp.BFF.Auth";
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest; // Allow HTTP in dev
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     })
     .AddOpenIdConnect("oidc", options =>
     {
         // These values should be set in appsettings.json or user-secrets for your environment
         options.Authority = builder.Configuration["Authentication:Oidc:Authority"];
-        // MetadataAddress: internal Docker address so the BFF container can reach Identity directly.
-        // The Authority above is used for issuer validation in tokens (matches SetIssuer in Identity).
-        options.MetadataAddress = builder.Configuration["Authentication:Oidc:MetadataAddress"]
-            ?? options.Authority + "/.well-known/openid-configuration";
-        options.RequireHttpsMetadata = false; // HTTP in Docker dev
+        options.RequireHttpsMetadata = true;
         options.ClientId = builder.Configuration["Authentication:Oidc:ClientId"];
         options.ClientSecret = builder.Configuration["Authentication:Oidc:ClientSecret"];
 
@@ -66,9 +63,9 @@ builder.Services.AddAuthentication(options =>
         // form_post is a cross-site POST which SameSite=Lax cookies won't follow on HTTP.
         // query mode = GET redirect, which SameSite=Lax allows for top-level navigations.
         options.CorrelationCookie.SameSite = SameSiteMode.Lax;
-        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
         options.NonceCookie.SameSite = SameSiteMode.Lax;
-        options.NonceCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.NonceCookie.SecurePolicy = CookieSecurePolicy.Always;
 
         // Capture tokens and move them to a server-side token store (in-memory for now).
         options.Events = new OpenIdConnectEvents
@@ -157,7 +154,7 @@ builder.Services.AddAuthentication(options =>
                         new CookieOptions
                         {
                             HttpOnly = true,
-                            Secure = false, // Allow HTTP in dev
+                            Secure = true,
                             SameSite = SameSiteMode.Lax
                         });
 
@@ -188,6 +185,18 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+var forwardedOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+};
+if (builder.Configuration.GetValue<bool>("ReverseProxy:TrustAllProxies"))
+{
+    // Dev only: trust all proxies inside the Docker network (Traefik).
+    // Do NOT enable in production.
+    forwardedOptions.KnownNetworks.Clear();
+    forwardedOptions.KnownProxies.Clear();
+}
+app.UseForwardedHeaders(forwardedOptions);
 app.UseHttpsRedirection();
 
 // Enable CORS early so preflight (OPTIONS) requests are handled before auth
@@ -222,7 +231,7 @@ app.Use(async (context, next) =>
 app.MapGet("/login", async (HttpContext ctx) =>
 {
     // Challenge the OIDC provider - will redirect the browser to the identity server
-    await ctx.ChallengeAsync("oidc", new AuthenticationProperties { RedirectUri = "http://fe.dummy.localhost/" });
+    await ctx.ChallengeAsync("oidc", new AuthenticationProperties { RedirectUri = "https://fe.dummy.localhost/" });
 });
 
 app.MapGet("/logout", async (HttpContext ctx) =>
@@ -238,7 +247,7 @@ app.MapGet("/logout", async (HttpContext ctx) =>
 
     // Sign out locally and at the identity provider
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    await ctx.SignOutAsync("oidc", new AuthenticationProperties { RedirectUri = "http://fe.dummy.localhost/" });
+    await ctx.SignOutAsync("oidc", new AuthenticationProperties { RedirectUri = "https://fe.dummy.localhost/" });
 });
 
 app.MapControllers();
