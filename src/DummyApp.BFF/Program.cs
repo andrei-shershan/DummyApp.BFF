@@ -10,9 +10,6 @@ using Microsoft.AspNetCore.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// load optional appsettings (contains ReverseProxy and OIDC placeholders)
-builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
