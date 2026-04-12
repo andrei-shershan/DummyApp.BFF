@@ -18,10 +18,11 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 // CORS: allow the frontend origin to call the BFF
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFE", policy =>
-        policy.WithOrigins("https://fe.dummy.localhost")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials());
@@ -191,8 +192,9 @@ var forwardedOptions = new ForwardedHeadersOptions
 };
 if (builder.Configuration.GetValue<bool>("ReverseProxy:TrustAllProxies"))
 {
-    // Dev only: trust all proxies inside the Docker network (Traefik).
-    // Do NOT enable in production.
+    // Required both in local Docker (Traefik) and on Azure App Service Linux,
+    // where Azure's own front-end proxy forwards X-Forwarded-For / X-Forwarded-Proto.
+    // Set ReverseProxy__TrustAllProxies=true in App Service Configuration for every environment.
     forwardedOptions.KnownNetworks.Clear();
     forwardedOptions.KnownProxies.Clear();
 }

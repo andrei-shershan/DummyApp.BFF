@@ -1,0 +1,95 @@
+trigger:
+  - main
+
+# Disable PR trigger as build validation is covered by GitHub Actions
+pr: none
+
+stages:
+
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    displayName: Build job
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        packageType: 'sdk'
+        version: '10.0.x'
+      displayName: 'Use .NET 10 SDK'
+
+    - script: dotnet restore src/DummyApp.BFF/DummyApp.BFF.csproj
+      displayName: 'Restore NuGet packages'
+
+    - script: >
+        dotnet publish src/DummyApp.BFF/DummyApp.BFF.csproj
+        --configuration Release
+        --no-restore
+        --output $(Build.ArtifactStagingDirectory)/publish
+      displayName: 'Publish'
+
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: '$(Build.ArtifactStagingDirectory)/publish'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/site.zip'
+        replaceExistingArchive: true
+      displayName: 'Archive publish output'
+
+    - publish: $(Build.ArtifactStagingDirectory)/site.zip
+      artifact: drop
+
+
+- stage: DeployTest
+  displayName: 'Deploy test'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(eq(variables['Build.Reason'], 'IndividualCI'), eq(variables['Build.Reason'], 'Manual')))
+  jobs:
+  - deployment: Deploy
+    environment: $(PIPELINES_ENVIRONMENT_TEST)
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: drop
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(SERVICE_CONNECTION_TEST)' # pipeline variable
+              appType: 'webAppLinux'
+              appName: '$(APP_NAME_TEST)'                     # pipeline variable
+              package: '$(Pipeline.Workspace)/drop/site.zip'
+              runtimeStack: 'DOTNETCORE|10.0'
+            displayName: 'Deploy to Azure Web App (Test)'
+
+
+- stage: DeployProd
+  displayName: 'Deploy prod'
+  dependsOn: DeployTest
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), or(eq(variables['Build.Reason'], 'IndividualCI'), eq(variables['Build.Reason'], 'Manual')))
+  jobs:
+  - deployment: DeployProd
+    environment: $(PIPELINES_ENVIRONMENT_PROD)
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: drop
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(SERVICE_CONNECTION_PROD)' # pipeline variable
+              appType: 'webAppLinux'
+              appName: '$(APP_NAME_PROD)'                     # pipeline variable
+              package: '$(Pipeline.Workspace)/drop/site.zip'
+              runtimeStack: 'DOTNETCORE|10.0'
+            displayName: 'Deploy to Azure Web App (Prod)'
