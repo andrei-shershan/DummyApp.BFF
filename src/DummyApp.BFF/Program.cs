@@ -227,10 +227,12 @@ app.Use(async (context, next) =>
 });
 
 // Simple endpoints to start login/logout flows from the browser
+var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "/";
+
 app.MapGet("/login", async (HttpContext ctx) =>
 {
     // Challenge the OIDC provider - will redirect the browser to the identity server
-    await ctx.ChallengeAsync("oidc", new AuthenticationProperties { RedirectUri = "https://fe.dummy.localhost/" });
+    await ctx.ChallengeAsync("oidc", new AuthenticationProperties { RedirectUri = frontendUrl });
 });
 
 app.MapGet("/logout", async (HttpContext ctx) =>
@@ -246,7 +248,7 @@ app.MapGet("/logout", async (HttpContext ctx) =>
 
     // Sign out locally and at the identity provider
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    await ctx.SignOutAsync("oidc", new AuthenticationProperties { RedirectUri = "https://fe.dummy.localhost/" });
+    await ctx.SignOutAsync("oidc", new AuthenticationProperties { RedirectUri = frontendUrl });
 });
 
 app.MapControllers();
