@@ -35,7 +35,7 @@ builder.Services.AddAuthentication(options =>
     {
         options.Cookie.Name = ".DummyApp.BFF.Auth";
         options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SameSite = SameSiteMode.None;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     })
     .AddOpenIdConnect("oidc", options =>
@@ -153,7 +153,7 @@ builder.Services.AddAuthentication(options =>
                         {
                             HttpOnly = true,
                             Secure = true,
-                            SameSite = SameSiteMode.Lax
+                            SameSite = SameSiteMode.None
                         });
 
                     logger.LogInformation("Session {SessionId} stored, token expires at {ExpiresAt}", sessionId, expiresAt);
