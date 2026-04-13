@@ -177,9 +177,10 @@ builder.Services.AddSingleton<ITokenService, TokenService>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+// Temporary: enable Developer Exception Page in all environments
+app.UseDeveloperExceptionPage();
 if (app.Environment.IsDevelopment())
 {
-    app.UseDeveloperExceptionPage();
     app.MapOpenApi();
 }
 
