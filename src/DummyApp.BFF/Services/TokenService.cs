@@ -56,14 +56,14 @@ namespace DummyApp.BFF.Services
         private async Task<string?> RefreshAsync(string sessionId, TokenSet tokens)
         {
             var client = _httpClientFactory.CreateClient("token_client");
-            var tokenEndpoint = _configuration["Authentication:Oidc:TokenEndpoint"] ?? _configuration["Authentication:Oidc:Authority"] + "/connect/token";
+            var tokenEndpoint = _configuration["IdentityServer:OidcClients:BFF:TokenEndpoint"] ?? _configuration["IdentityServer:Authority"] + "/connect/token";
 
             var parameters = new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
                 ["refresh_token"] = tokens.RefreshToken ?? string.Empty,
-                ["client_id"] = _configuration["Authentication:Oidc:ClientId"],
-                ["client_secret"] = _configuration["Authentication:Oidc:ClientSecret"],
+                ["client_id"] = _configuration["IdentityServer:OidcClients:BFF:ClientId"],
+                ["client_secret"] = _configuration["IdentityServer:OidcClients:BFF:ClientSecret"],
             };
 
             var req = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint)
