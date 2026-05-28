@@ -52,10 +52,10 @@ builder.Services.AddAuthentication(options =>
     .AddOpenIdConnect("oidc", options =>
     {
         // These values should be set in appsettings.json or user-secrets for your environment
-        options.Authority = builder.Configuration["Authentication:Oidc:Authority"];
+        options.Authority = builder.Configuration["IdentityServer:Authority"];
         options.RequireHttpsMetadata = true;
-        options.ClientId = builder.Configuration["Authentication:Oidc:ClientId"];
-        options.ClientSecret = builder.Configuration["Authentication:Oidc:ClientSecret"];
+        options.ClientId = builder.Configuration["IdentityServer:OidcClients:BFF:ClientId"];
+        options.ClientSecret = builder.Configuration["IdentityServer:OidcClients:BFF:ClientSecret"];
 
         options.ResponseType = "code"; // Authorization Code
         options.UsePkce = true;         // PKCE
@@ -85,9 +85,9 @@ builder.Services.AddAuthentication(options =>
             // before issuing the redirect.
             OnRedirectToIdentityProvider = ctx =>
             {
-                var internalBase = builder.Configuration["Authentication:Oidc:MetadataAddress"]
+                var internalBase = builder.Configuration["IdentityServer:OidcClients:BFF:MetadataAddress"]
                     ?.Replace("/.well-known/openid-configuration", "") ?? string.Empty;
-                var publicBase = builder.Configuration["Authentication:Oidc:Authority"] ?? string.Empty;
+                var publicBase = builder.Configuration["IdentityServer:Authority"] ?? string.Empty;
 
                 if (!string.IsNullOrEmpty(internalBase) && !string.IsNullOrEmpty(publicBase)
                     && ctx.ProtocolMessage.IssuerAddress.StartsWith(internalBase, StringComparison.OrdinalIgnoreCase))
@@ -105,9 +105,9 @@ builder.Services.AddAuthentication(options =>
 
             OnRedirectToIdentityProviderForSignOut = ctx =>
             {
-                var internalBase = builder.Configuration["Authentication:Oidc:MetadataAddress"]
+                var internalBase = builder.Configuration["IdentityServer:OidcClients:BFF:MetadataAddress"]
                     ?.Replace("/.well-known/openid-configuration", "") ?? string.Empty;
-                var publicBase = builder.Configuration["Authentication:Oidc:Authority"] ?? string.Empty;
+                var publicBase = builder.Configuration["IdentityServer:Authority"] ?? string.Empty;
 
                 if (!string.IsNullOrEmpty(internalBase) && !string.IsNullOrEmpty(publicBase)
                     && ctx.ProtocolMessage.IssuerAddress.StartsWith(internalBase, StringComparison.OrdinalIgnoreCase))
@@ -239,7 +239,7 @@ app.Use(async (context, next) =>
 });
 
 // Simple endpoints to start login/logout flows from the browser
-var frontendUrl = builder.Configuration["App:FrontendUrl"] ?? "/";
+var frontendUrl = builder.Configuration["Services:Frontend:BaseUrl"] ?? "/";
 
 app.MapGet("/login", async (HttpContext ctx) =>
 {
