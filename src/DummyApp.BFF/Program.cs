@@ -17,7 +17,12 @@ if (!builder.Environment.IsDevelopment())
     var keyVaultUrl = builder.Configuration["KeyVault:Url"];
     if (!string.IsNullOrEmpty(keyVaultUrl))
     {
-        builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUrl), new DefaultAzureCredential());
+        var clientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID");
+        var credential = string.IsNullOrEmpty(clientId)
+            ? new ManagedIdentityCredential()
+            : new ManagedIdentityCredential(clientId);
+
+        builder.Configuration.AddAzureKeyVault(new Uri(keyVaultUrl), credential);
     }
 }
 
@@ -278,8 +283,13 @@ app.MapGet("/me", (HttpContext ctx) =>
         ?? ctx.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
     var email = ctx.User.FindFirst("email")?.Value
         ?? ctx.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+    var roles = ctx.User.FindAll("role")
+        .Concat(ctx.User.FindAll(System.Security.Claims.ClaimTypes.Role))
+        .Select(c => c.Value)
+        .Distinct()
+        .ToArray();
 
-    return Results.Json(new { isAuthenticated = true, sub, name, email });
+    return Results.Json(new { isAuthenticated = true, sub, name, email, roles });
 });
 
 // Map the reverse proxy (YARP) - it will handle routes configured in appsettings.json
