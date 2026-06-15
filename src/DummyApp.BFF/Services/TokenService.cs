@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using DummyApp.BFF.Configuration;
 
 namespace DummyApp.BFF.Services
 {
@@ -12,58 +14,75 @@ namespace DummyApp.BFF.Services
     {
         private readonly ITokenStore _store;
         private readonly IHttpClientFactory _httpClientFactory;
-        private readonly IConfiguration _configuration;
-        private readonly object _lock = new();
+        private readonly ConfigurationSettings _settings;
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _refreshLocks = new();
 
-        public TokenService(ITokenStore store, IHttpClientFactory httpClientFactory, IConfiguration configuration)
+        public TokenService(
+            ITokenStore store,
+            IHttpClientFactory httpClientFactory,
+            IOptions<ConfigurationSettings> configuration)
         {
             _store = store;
             _httpClientFactory = httpClientFactory;
-            _configuration = configuration;
+            _settings = configuration.Value;
         }
 
         public async Task<string?> GetAccessTokenAsync(string sessionId)
         {
             var tokens = await _store.GetAsync(sessionId);
-            if (tokens == null) return null;
+            if (tokens == null)
+            {
+                return null;
+            }
 
-            // If token is still valid, return it
             if (tokens.ExpiresAt > DateTimeOffset.UtcNow.AddSeconds(60))
             {
                 return tokens.AccessToken;
             }
 
-            // Otherwise try refresh
-            // Use a lock per service instance to avoid concurrent refreshes for the same session
-            lock (_lock)
+            var refreshLock = _refreshLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+            await refreshLock.WaitAsync();
+            try
             {
-                // Reload inside lock
-                tokens = _store.GetAsync(sessionId).GetAwaiter().GetResult();
-                if (tokens == null) return null;
-                if (tokens.ExpiresAt > DateTimeOffset.UtcNow.AddSeconds(60)) return tokens.AccessToken;
+                tokens = await _store.GetAsync(sessionId);
+                if (tokens == null)
+                {
+                    return null;
+                }
 
-                // perform refresh synchronously inside lock
-                var refreshed = RefreshAsync(sessionId, tokens).GetAwaiter().GetResult();
-                return refreshed;
+                if (tokens.ExpiresAt > DateTimeOffset.UtcNow.AddSeconds(60))
+                {
+                    return tokens.AccessToken;
+                }
+
+                return await RefreshAsync(sessionId, tokens);
+            }
+            finally
+            {
+                refreshLock.Release();
             }
         }
 
-        public Task RemoveAsync(string sessionId)
-        {
-            return _store.RemoveAsync(sessionId);
-        }
+        public Task RemoveAsync(string sessionId) => _store.RemoveAsync(sessionId);
 
         private async Task<string?> RefreshAsync(string sessionId, TokenSet tokens)
         {
+            if (string.IsNullOrEmpty(tokens.RefreshToken))
+            {
+                await _store.RemoveAsync(sessionId);
+                return null;
+            }
+
             var client = _httpClientFactory.CreateClient("token_client");
-            var tokenEndpoint = _configuration["IdentityServer:OidcClients:BFF:TokenEndpoint"] ?? _configuration["IdentityServer:Authority"] + "/connect/token";
+            var tokenEndpoint = _settings.IdentityServer.OidcClients.BFF.TokenEndpoint
+                ?? _settings.IdentityServer.Authority.TrimEnd('/') + "/connect/token";
 
             var parameters = new Dictionary<string, string>
             {
                 ["grant_type"] = "refresh_token",
-                ["refresh_token"] = tokens.RefreshToken ?? string.Empty,
-                ["client_id"] = _configuration["IdentityServer:OidcClients:BFF:ClientId"],
-                ["client_secret"] = _configuration["IdentityServer:OidcClients:BFF:ClientSecret"],
+                ["refresh_token"] = tokens.RefreshToken,
+                ["client_id"] = _settings.IdentityServer.OidcClients.BFF.ClientId,
+                ["client_secret"] = _settings.IdentityServer.OidcClients.BFF.ClientSecret,
             };
 
             var req = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint)
@@ -71,10 +90,18 @@ namespace DummyApp.BFF.Services
                 Content = new FormUrlEncodedContent(parameters)
             };
 
-            var resp = await client.SendAsync(req);
+            HttpResponseMessage resp;
+            try
+            {
+                resp = await client.SendAsync(req);
+            }
+            catch
+            {
+                return null;
+            }
+
             if (!resp.IsSuccessStatusCode)
             {
-                // failed refresh - remove tokens
                 await _store.RemoveAsync(sessionId);
                 return null;
             }
