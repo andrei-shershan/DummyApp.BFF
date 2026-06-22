@@ -1,0 +1,39 @@
+# Ignore build outputs
+bin/
+obj/
+
+# Ignore user-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Ignore local IDE/workspace folders
+.vs/
+.idea/
+
+# Ignore NuGet packages and caches
+*.nupkg
+packages/
+
+# Ignore temporary files
+*.tmp
+*.temp
+*.log
+
+# Ignore OS files
+Thumbs.db
+.DS_Store
+
+# Ignore Docker and certificates
+certs/
+*.pfx
+
+# Ignore local configuration and secrets
+*.env
+appsettings*.json
+
+# Ignore generated files
+**/obj/**
+**/bin/**
+**/*.generated.cs
