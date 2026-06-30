@@ -69,7 +69,9 @@ namespace DummyApp.BFF.Extensions
 
             endpoints.MapGet("/login", async (HttpContext ctx) =>
             {
-                await ctx.ChallengeAsync("oidc", new AuthenticationProperties { RedirectUri = frontendUrl });
+                var returnUrl = ctx.Request.Query["returnUrl"].ToString();
+                var redirectUri = string.IsNullOrWhiteSpace(returnUrl) ? frontendUrl : returnUrl;
+                await ctx.ChallengeAsync("oidc", new AuthenticationProperties { RedirectUri = redirectUri });
             });
 
             endpoints.MapGet("/logout", async (HttpContext ctx) =>
