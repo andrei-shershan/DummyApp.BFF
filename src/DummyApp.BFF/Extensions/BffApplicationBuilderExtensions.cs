@@ -1,6 +1,8 @@
+using System;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
 using DummyApp.BFF.Configuration;
@@ -86,6 +88,24 @@ namespace DummyApp.BFF.Extensions
 
                 await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 await ctx.SignOutAsync("oidc", new AuthenticationProperties { RedirectUri = frontendUrl });
+            });
+
+            endpoints.MapGet("/register/{token}", async (HttpContext ctx) =>
+            {
+                var token = ctx.Request.RouteValues["token"]?.ToString();
+                if (string.IsNullOrEmpty(token))
+                {
+                    ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    await ctx.Response.WriteAsync("Registration token is required.");
+                    return;
+                }
+
+                var returnUrl = ctx.Request.Query["returnUrl"].ToString();
+                var redirectUrl = string.IsNullOrWhiteSpace(returnUrl) ? frontendUrl : returnUrl;
+                var identityBase = config.IdentityServer.Authority?.TrimEnd('/') ?? string.Empty;
+                var url = $"{identityBase}/account/register/{Uri.EscapeDataString(token)}?returnUrl={Uri.EscapeDataString(redirectUrl)}";
+
+                ctx.Response.Redirect(url);
             });
 
             endpoints.MapGet("/me", (HttpContext ctx) =>
