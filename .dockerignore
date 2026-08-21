@@ -21,6 +21,10 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
+**/tests
+**/pipelines
+**/.github
+**/*.slnx
 LICENSE
 README.md
 !**/.gitignore
